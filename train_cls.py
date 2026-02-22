@@ -222,7 +222,7 @@ class TrainCLS:
                     epoch_loss += loss.item()
                     prof.step()
 
-                # Evaluation Step
+                # Evaluation step
                 classifier_model.eval()
                 val_loss, correct, total = 0, 0, 0
                 all_preds, all_labels = [], []
@@ -260,9 +260,8 @@ class TrainCLS:
                         probs=None,
                         y_true=all_labels,
                         preds=all_preds,
-                        class_names=["Fraud", "Valid"]
+                        class_names=["Invalid", "Valid"]
                     )
-                
                 self.wandb_run.log(log_dict)
 
                 print(f"Epoch {epoch+1}: Loss: {avg_train_loss:.4f} | Val: {avg_val_loss:.4f} | Acc: {val_acc:.2f}%")
