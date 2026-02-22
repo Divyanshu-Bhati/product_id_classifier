@@ -10,6 +10,7 @@ class DataCreator:
         self.seed = seed
         self.vae_data = "vae_set.csv"
         self.cls_data = "cls_set.csv"
+        self.test_data = "test_set.csv"
         self.wrong_chars_data = "wrong_chars.csv"
         
     def _filters(self, data_dict, data_filters):
@@ -79,13 +80,11 @@ class DataCreator:
 
         elif task_type == "test":
             df = pd.read_csv(os.path.join(self.input_path, self.test_data))
+            df = df.sample(n=5_000, random_state=self.seed).reset_index(drop=True)
+            print("Using 5_000 samples for testing.")
             test_df = df[df["split"] == "test"]
             data["X_test"] = test_df["input"].tolist()
             data["y_test"] = encode_labels(test_df["is_pd_id"])
-
-        elif task_type == "inference":
-            # Fetch from fastapi or try to load from custom path # TODO
-            data["X_inference"] = df["inference"].tolist()
 
         else:
             raise ValueError(f"Unknown task type: {task_type}")
@@ -139,7 +138,12 @@ class DataCreator:
     def run_cls(self, data_filters, task_type):
         data = self.load_data(data_filters=data_filters, task_type=task_type)
         X_train, X_val, y_train, y_val = data["X_train"], data["X_eval"], data["y_train"], data["y_eval"]
-        return X_train, X_val, y_train, y_val    
+        return X_train, X_val, y_train, y_val
+    
+    def run_test(self, data_filters, task_type):
+        data = self.load_data(data_filters=data_filters, task_type=task_type)
+        X_test, y_test = data["X_test"], data["y_test"]
+        return X_test, y_test
     
     def load_training_vocab(self):
         # Loads the fixed vocabulary (and training max_length) from the saved JSON.
