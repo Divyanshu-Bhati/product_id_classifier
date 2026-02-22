@@ -9,6 +9,7 @@ class DataCreator:
         self.training_history = training_history
         self.seed = seed
         self.vae_data = "vae_set.csv"
+        self.cls_data = "cls_set.csv"
         self.wrong_chars_data = "wrong_chars.csv"
         
     def _filters(self, data_dict, data_filters):
@@ -20,7 +21,7 @@ class DataCreator:
         min_len = data_filters.get("min_len", 10)
         remove_non_ascii = data_filters.get("remove_non_ascii", True)
         
-        illegal_set = set(pd.read_csv(os.path.join(self.input_path, self.wrong_chars_data)))['found_chars']
+        illegal_set = set(pd.read_csv(os.path.join(self.input_path, self.wrong_chars_data))['found_chars'].tolist())
 
         def is_valid(s):
             s = str(s)
@@ -57,6 +58,8 @@ class DataCreator:
         data = {}
         if task_type == "train_vae":
             df = pd.read_csv(os.path.join(self.input_path, self.vae_data))
+            df = df.sample(n=10_000, random_state=self.seed).reset_index(drop=True)
+            print("Using 10_000 samples for testing.")
             train_df = df[df["split"] == "train"]
             eval_df = df[df["split"] == "eval"]
             data["X_train"] = train_df["input"].tolist()
@@ -65,6 +68,8 @@ class DataCreator:
 
         elif task_type == "train_cls":
             df = pd.read_csv(os.path.join(self.input_path, self.cls_data))
+            df = df.sample(n=5_000, random_state=self.seed).reset_index(drop=True)
+            print("Using 5_000 samples for testing.")
             train_df = df[df["split"] == "train"]
             eval_df = df[df["split"] == "eval"]
             data["X_train"] = train_df["input"].tolist()
@@ -131,9 +136,14 @@ class DataCreator:
             json.dump({"char2idx": char2idx, "idx2char": idx2char, "max_length": max_length}, f)
         return max_length, X_train_padded, X_val_padded, y_val, char2idx, idx2char
     
-    def load_training_vocab(self, vocab_file_name="vocab.json"): # TODO
+    def run_cls(self, data_filters, task_type):
+        data = self.load_data(data_filters=data_filters, task_type=task_type)
+        X_train, X_val, y_train, y_val = data["X_train"], data["X_eval"], data["y_train"], data["y_eval"]
+        return X_train, X_val, y_train, y_val    
+    
+    def load_training_vocab(self):
         # Loads the fixed vocabulary (and training max_length) from the saved JSON.
-        vocab_path = os.path.join(os.path.dirname(self.input_path), "training_history", vocab_file_name)
+        vocab_path = os.path.join(self.training_history, "vocab.json")
         if not os.path.exists(vocab_path):
             raise ValueError("Vocabulary file not found. Please retrain the model to generate a vocabulary.")
         with open(vocab_path, "r") as f:
@@ -145,7 +155,7 @@ class DataCreator:
             raise ValueError("Training max length not found in vocabulary file. Please retrain the model.")
         return train_max_length, char2idx, idx2char
 
-    def pad_truncate_data(self, data_list, fixed_max_length, char2idx): # TODO
+    def pad_truncate_data(self, data_list, fixed_max_length, char2idx):
         # Encodes and pads (or truncates) the provided list to the fixed training max_length.
         def encode_sequence(code, char2idx):
             unk_id = char2idx.get("<UNK>", 1)
@@ -156,3 +166,12 @@ class DataCreator:
             truncated = seq[:fixed_max_length]
             padded[i, :len(truncated)] = truncated
         return padded
+    
+    def decode_sequence(self, encoded_seq, idx2char):
+        """Decodes a list of token indices into a string, stopping at the <PAD> token (index 0)."""
+        decoded = []
+        for token in encoded_seq:
+            if token == 0:
+                break
+            decoded.append(idx2char.get(token, '<UNK>'))
+        return ''.join(decoded)

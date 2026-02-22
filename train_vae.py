@@ -258,8 +258,8 @@ class TrainVAE:
             df_logs.to_csv(csv_path, index=False)
             print("Training metrics saved to:", csv_path)
             
-            # Close the run
-            self.wandb_run.finish()
+        # Close the run
+        self.wandb_run.finish()
 
 if __name__ == "__main__":
     TrainVAE().train_vae_model()
