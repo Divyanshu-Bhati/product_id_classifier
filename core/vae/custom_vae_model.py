@@ -47,7 +47,12 @@ class VAE(nn.Module):
         h = self.encoder_dropout(h)
         z_mean = self.encoder_mean(h)
         z_log_var = self.encoder_log_var(h)
-        z = self.reparameterize(z_mean, z_log_var)
+        
+        if self.training:
+            z = self.reparameterize(z_mean, z_log_var)
+        else:
+            z = z_mean # During eval, I do not want the model to return a random sample from the distribution
+            
         return z, z_mean, z_log_var
 
     def decode(self, z):
