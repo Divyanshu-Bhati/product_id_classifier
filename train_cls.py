@@ -165,6 +165,10 @@ class TrainCLS:
         # Standardize scores before training
         mean = train_score_vector.mean(dim=0)
         std = train_score_vector.std(dim=0) + 1e-7  # Small epsilon to prevent div by zero (common feature in a batch -> std. deviation 0 -> NaN in tensors)
+        
+        # Save training mean and std for inference
+        torch.save({'mean': mean, 'std': std},os.path.join(self.training_history, "cls_scaler_params.pth")) 
+        
         train_score_vector = (train_score_vector - mean) / std
         eval_score_vector = (eval_score_vector - mean) / std
         train_ds = TensorDataset(train_score_vector, train_labels)
