@@ -3,5 +3,5 @@
 .cls_venv
 __pycache__/
 *.pyc
-.wandb
+wandb
 training_history/

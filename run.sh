@@ -6,6 +6,8 @@ PYTHON_RW_VERSION="3.10"
 
 echo "--- Starting Environment Setup ---"
 
+wandb setup --relogin
+
 # 2. Check if Python 3.10 is installed on the system
 if ! command -v python$PYTHON_RW_VERSION &> /dev/null; then
     echo "Python Version Error: Python $PYTHON_RW_VERSION not found. Please install it first."
