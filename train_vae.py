@@ -16,6 +16,8 @@ from core.vae.custom_vae_model import VAE
 from utils.parse_data import DataCreator
 
 import wandb
+import warnings
+warnings.filterwarnings("ignore", message=".*Profiler clears events at the end of each cycle.*") # Ignore profiler memory flush warnings
 
 class TrainVAE:
     def __init__(self):
