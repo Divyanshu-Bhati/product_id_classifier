@@ -1,0 +1,33 @@
+{
+    "inputs_path": "data/",
+    "training_history": "training_history",
+    "random_seed": 42,
+    "data_filters": {
+      "max_len": 14,
+      "min_len": 10,
+      "remove_non_ascii": true
+    },
+    "vae_configs": {
+        "continue_training": true,
+        "early_stopping": true,
+        "epochs": 10,
+        "hyperparameters": 
+        {
+            "batch_size": 512,
+            "embedding_dim": 128,
+            "latent_dim": 64,
+            "hidden_dim": 64,
+            "learning_rate": 0.001,
+            "patience": 10
+        }
+    },
+    "cls_configs": {
+        "epochs": 100,
+        "hyperparameters":
+        {
+            "batch_size": 512,
+            "learning_rate": 0.001,
+            "patience": 10
+        }
+    }
+}
