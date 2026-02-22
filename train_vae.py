@@ -251,16 +251,13 @@ class TrainVAE:
                 prof.step() # Update the profiler
 
             # Save final weights and logs.
-            final_weights_file = os.path.join(best_weights_dir, "vae_weights_complete.pth")
-            torch.save(self.vae_model.state_dict(), final_weights_file)
-            print("Training complete. Final weights saved to:", final_weights_file)
-            
             df_logs = pd.DataFrame(logs_list)
             csv_path = os.path.join(logs_dir, "vae_training_metrics.csv")
             df_logs.to_csv(csv_path, index=False)
             print("Training metrics saved to:", csv_path)
             
         # Close the run
+        print("VAE training complete.")
         self.wandb_run.finish()
 
 if __name__ == "__main__":
