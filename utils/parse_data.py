@@ -4,9 +4,9 @@ import numpy as np
 import pandas as pd
 
 class DataCreator:
-    def __init__(self, input_path, weights_path, seed):
+    def __init__(self, input_path, training_history, seed):
         self.input_path = input_path
-        self.weights_path = weights_path
+        self.training_history = training_history
         self.seed = seed
         self.vae_data = "vae_set.csv"
         self.wrong_chars_data = "wrong_chars.csv"
@@ -126,7 +126,7 @@ class DataCreator:
         print("Max seq len:", max_length, "found for MPN:", max(X_train, key=len))
         X_train_padded, X_val_padded, char2idx, idx2char = self.vae_feature_engineer(X_train, X_val, max_length)
         # Save vocabulary (with training max_length) for inference consistency.
-        vocab_path = os.path.join(self.weights_path, "vocab.json")
+        vocab_path = os.path.join(self.training_history, "vocab.json")
         with open(vocab_path, "w") as f:
             json.dump({"char2idx": char2idx, "idx2char": idx2char, "max_length": max_length}, f)
         return max_length, X_train_padded, X_val_padded, y_val, char2idx, idx2char
