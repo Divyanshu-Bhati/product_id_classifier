@@ -24,6 +24,8 @@ warnings.filterwarnings("ignore", message=".*Profiler clears events at the end o
 
 class TrainCLS:
     def __init__(self, experiment_mode=False):
+        self.experiment_mode = experiment_mode
+        
         with open("utils/configs.json", "r") as f:
             config = json.load(f)
         self.input_path = config["inputs_path"]
@@ -34,7 +36,7 @@ class TrainCLS:
         
         # Classifier hyperparameters
         cls_configs = config["cls_configs"]
-        self.epochs = 10 if experiment_mode else cls_configs["epochs"]
+        self.epochs = 10 if self.experiment_mode else cls_configs["epochs"]
         self.learning_rate = cls_configs["hyperparameters"]["learning_rate"]
         self.batch_size = cls_configs["hyperparameters"]["batch_size"]
         
