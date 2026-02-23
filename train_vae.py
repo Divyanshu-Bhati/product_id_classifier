@@ -53,6 +53,7 @@ class TrainVAE:
 
         # Set hyperparameters for model creation
         self.num_epochs = 10 if self.experiment_mode else vae_configs["epochs"]
+        self.num_workers = 2 if self.experiment_mode else vae_configs["num_workers"]
         self.vocab_size = len(self.char2idx)
         self.batch_size = self.hyperparameters["batch_size"]
         self.embedding_dim = self.hyperparameters["embedding_dim"]
@@ -97,12 +98,12 @@ class TrainVAE:
         print("Creating DataLoaders...")
         train_tensor = torch.tensor(self.X_train_padded, dtype=torch.long)
         train_dataset = TensorDataset(train_tensor)
-        train_dataloader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True) # TODO pin memory
+        train_dataloader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, pin_memory=True) # TODO pin memory
 
         val_x_tensor = torch.tensor(self.X_val_padded, dtype=torch.long)
         val_y_tensor = torch.tensor(self.y_val, dtype=torch.float)
         val_dataset = TensorDataset(val_x_tensor, val_y_tensor)
-        val_dataloader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
+        val_dataloader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=True)
                             
         # Directories for saving weights and logs.
         training_weights_dir = os.path.join(self.training_history, "weights")  # root folder for storing training weights

@@ -11,9 +11,10 @@
         "continue_training": false,
         "early_stopping": true,
         "epochs": 100,
+        "num_workers": 2,
         "hyperparameters": 
         {
-            "batch_size": 512,
+            "batch_size": 1024,
             "embedding_dim": 64,
             "latent_dim": 128,
             "hidden_dim": 128,
@@ -23,9 +24,10 @@
     },
     "cls_configs": {
         "epochs": 100,
+        "num_workers": 2,
         "hyperparameters":
         {
-            "batch_size": 512,
+            "batch_size": 1024,
             "learning_rate": 0.001,
             "patience": 10
         }

@@ -37,8 +37,9 @@ class TrainCLS:
         # Classifier hyperparameters
         cls_configs = config["cls_configs"]
         self.epochs = 10 if self.experiment_mode else cls_configs["epochs"]
+        self.num_workers = 2 if self.experiment_mode else cls_configs["num_workers"]
         self.learning_rate = cls_configs["hyperparameters"]["learning_rate"]
-        self.batch_size = cls_configs["hyperparameters"]["batch_size"]
+        self.batch_size = 512 if self.experiment_mode else cls_configs["hyperparameters"]["batch_size"]
         
         torch.manual_seed(self.random_seed)
         np.random.seed(self.random_seed)
@@ -178,8 +179,8 @@ class TrainCLS:
         eval_score_vector = (eval_score_vector - mean) / std
         train_ds = TensorDataset(train_score_vector, train_labels)
         eval_ds = TensorDataset(eval_score_vector, eval_labels)
-        train_dataloader = DataLoader(train_ds, batch_size=self.batch_size, shuffle=True)
-        eval_dataloader = DataLoader(eval_ds, batch_size=self.batch_size, shuffle=False)
+        train_dataloader = DataLoader(train_ds, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, pin_memory=True)
+        eval_dataloader = DataLoader(eval_ds, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=True)
         
         # Freeze the VAE
         for param in self.vae_model.parameters():
