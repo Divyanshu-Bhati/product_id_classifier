@@ -135,6 +135,7 @@ class DataCreator:
         X_train_padded, X_val_padded, char2idx, idx2char = self.vae_feature_engineer(X_train, X_val, max_length)
         # Save vocabulary (with training max_length) for inference consistency.
         vocab_path = os.path.join(self.training_history, "vocab.json")
+        os.makedirs(os.path.dirname(vocab_path), exist_ok=True)
         with open(vocab_path, "w") as f:
             json.dump({"char2idx": char2idx, "idx2char": idx2char, "max_length": max_length}, f)
         return max_length, X_train_padded, X_val_padded, y_val, char2idx, idx2char

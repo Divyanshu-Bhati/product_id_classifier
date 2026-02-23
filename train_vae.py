@@ -141,7 +141,7 @@ class TrainVAE:
         # Add PyTorch profiler
         with torch.profiler.profile(
             activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA], # Add metal for mac runs?
-            schedule=torch.profiler.schedule(wait=1, warmup=1, active=3),
+            schedule=torch.profiler.schedule(wait=1, warmup=1, active=1), # using it only for first few epochs to identify performance bottlenecks
             on_trace_ready=torch.profiler.tensorboard_trace_handler('./training_history/profiler_logs'),
             record_shapes=True,
             with_stack=True
@@ -185,8 +185,8 @@ class TrainVAE:
                 val_loss = 0
                 total_val_samples = len(val_dataloader.dataset)
                 # Tracking error by class (y=1 vs y=0)
-                pos_errors = []
-                neg_errors = []
+                pos_sum, pos_count = 0, 0
+                neg_sum, neg_count = 0, 0
 
                 with torch.no_grad(): # no gradient calculation during validation
                     for batch in tqdm(val_dataloader, desc="Validation", leave=False):
@@ -200,11 +200,16 @@ class TrainVAE:
                             recon_logits.transpose(1, 2), x_val, reduction='none', ignore_index=0
                         ).sum(dim=1)
                         
-                        pos_errors.extend(per_sample_recon[y_val == 1].tolist())
-                        neg_errors.extend(per_sample_recon[y_val == 0].tolist())
+                        pos_batch = per_sample_recon[y_val == 1]
+                        neg_batch = per_sample_recon[y_val == 0]
+                        pos_sum += pos_batch.sum().item()
+                        pos_count += pos_batch.size(0)
+                        neg_sum += neg_batch.sum().item()
+                        neg_count += neg_batch.size(0)
+                        
                 avg_val_loss = val_loss / total_val_samples
-                avg_pos_err = np.mean(pos_errors) if pos_errors else 0
-                avg_neg_err = np.mean(neg_errors) if neg_errors else 0
+                avg_pos_err = pos_sum / pos_count if pos_count > 0 else 0
+                avg_neg_err = neg_sum / neg_count if neg_count > 0 else 0
 
                 print(f"VAE Val Loss: {avg_val_loss:.4f}")
                 print(f"Mean Recon Error (Valid IDs): {avg_pos_err:.4f}")
