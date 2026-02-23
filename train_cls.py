@@ -179,8 +179,8 @@ class TrainCLS:
         eval_score_vector = (eval_score_vector - mean) / std
         train_ds = TensorDataset(train_score_vector, train_labels)
         eval_ds = TensorDataset(eval_score_vector, eval_labels)
-        train_dataloader = DataLoader(train_ds, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, pin_memory=True)
-        eval_dataloader = DataLoader(eval_ds, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=True)
+        train_dataloader = DataLoader(train_ds, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
+        eval_dataloader = DataLoader(eval_ds, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
         
         # Freeze the VAE
         for param in self.vae_model.parameters():
