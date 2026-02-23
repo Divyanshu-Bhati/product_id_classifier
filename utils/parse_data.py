@@ -4,10 +4,11 @@ import numpy as np
 import pandas as pd
 
 class DataCreator:
-    def __init__(self, input_path, training_history, seed):
+    def __init__(self, input_path, training_history, seed, experiment_mode=False):
         self.input_path = input_path
         self.training_history = training_history
         self.seed = seed
+        self.experiment_mode = experiment_mode
         self.vae_data = "vae_set.csv"
         self.cls_data = "cls_set.csv"
         self.test_data = "test_set.csv"
@@ -59,8 +60,9 @@ class DataCreator:
         data = {}
         if task_type == "train_vae":
             df = pd.read_csv(os.path.join(self.input_path, self.vae_data))
-            df = df.sample(n=10_000, random_state=self.seed).reset_index(drop=True)
-            print("Using 10_000 samples for testing.")
+            if self.experiment_mode:
+                df = df.sample(n=10_000, random_state=self.seed).reset_index(drop=True)
+                print("In experiment mode: Using 10_000 samples only.")
             train_df = df[df["split"] == "train"]
             eval_df = df[df["split"] == "eval"]
             data["X_train"] = train_df["input"].tolist()
@@ -69,8 +71,9 @@ class DataCreator:
 
         elif task_type == "train_cls":
             df = pd.read_csv(os.path.join(self.input_path, self.cls_data))
-            df = df.sample(n=5_000, random_state=self.seed).reset_index(drop=True)
-            print("Using 5_000 samples for testing.")
+            if self.experiment_mode:
+                df = df.sample(n=5_000, random_state=self.seed).reset_index(drop=True)
+                print("In experiment mode: Using 5_000 samples only.")
             train_df = df[df["split"] == "train"]
             eval_df = df[df["split"] == "eval"]
             data["X_train"] = train_df["input"].tolist()
@@ -80,8 +83,9 @@ class DataCreator:
 
         elif task_type == "test":
             df = pd.read_csv(os.path.join(self.input_path, self.test_data))
-            df = df.sample(n=5_000, random_state=self.seed).reset_index(drop=True)
-            print("Using 5_000 samples for testing.")
+            if self.experiment_mode:
+                df = df.sample(n=5_000, random_state=self.seed).reset_index(drop=True)
+                print("In experiment mode: Using 5_000 samples only.")
             test_df = df[df["split"] == "test"]
             data["X_test"] = test_df["input"].tolist()
             data["y_test"] = encode_labels(test_df["is_pd_id"])

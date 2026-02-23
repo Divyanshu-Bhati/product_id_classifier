@@ -1,6 +1,7 @@
 import os
 import json
 from tqdm import tqdm
+import argparse
 import numpy as np
 from rich.console import Console
 from rich.table import Table
@@ -22,7 +23,7 @@ import warnings
 warnings.filterwarnings("ignore", message=".*Profiler clears events at the end of each cycle.*") # Ignore profiler memory flush warnings
 
 class TrainCLS:
-    def __init__(self):
+    def __init__(self, experiment_mode=False):
         with open("utils/configs.json", "r") as f:
             config = json.load(f)
         self.input_path = config["inputs_path"]
@@ -33,7 +34,7 @@ class TrainCLS:
         
         # Classifier hyperparameters
         cls_configs = config["cls_configs"]
-        self.epochs = cls_configs["epochs"]
+        self.epochs = 10 if experiment_mode else cls_configs["epochs"]
         self.learning_rate = cls_configs["hyperparameters"]["learning_rate"]
         self.batch_size = cls_configs["hyperparameters"]["batch_size"]
         
@@ -66,6 +67,7 @@ class TrainCLS:
             entity="divyanshubhati",
             project="PD_CLS_TRAINING",
             config={
+                "tags": ["experiment"] if self.experiment_mode else ["full_run"],
                 "learning_rate": self.learning_rate,
                 "batch_size": self.batch_size,
                 "epochs": self.epochs,
@@ -332,4 +334,7 @@ class TrainCLS:
         
 # Run the classifier pipeline.
 if __name__ == "__main__":
-    TrainCLS().train_cls_model()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--experiment', action='store_true', help='Run small sample/fewer epochs')
+    args = parser.parse_args()
+    TrainCLS(experiment_mode=args.experiment).train_cls_model()

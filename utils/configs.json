@@ -10,7 +10,7 @@
     "vae_configs": {
         "continue_training": false,
         "early_stopping": true,
-        "epochs": 10,
+        "epochs": 100,
         "hyperparameters": 
         {
             "batch_size": 512,
@@ -22,7 +22,7 @@
         }
     },
     "cls_configs": {
-        "epochs": 10,
+        "epochs": 100,
         "hyperparameters":
         {
             "batch_size": 512,

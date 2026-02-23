@@ -2,6 +2,7 @@ import os
 import glob
 import json
 from tqdm import tqdm
+import argparse
 import numpy as np
 import pandas as pd
 import torch
@@ -20,7 +21,10 @@ import warnings
 warnings.filterwarnings("ignore", message=".*Profiler clears events at the end of each cycle.*") # Ignore profiler memory flush warnings
 
 class TrainVAE:
-    def __init__(self):
+    def __init__(self, experiment_mode=False):
+        # Catch arguments
+        self.experiment_mode = experiment_mode
+        
         with open("utils/configs.json", "r") as f:
             config = json.load(f)
         
@@ -28,7 +32,6 @@ class TrainVAE:
         self.input_path = config["inputs_path"]
         self.training_history = config["training_history"]
         vae_configs = config["vae_configs"]
-        self.epochs = vae_configs["epochs"]
         self.continue_training = vae_configs["continue_training"]
         self.early_stopping = vae_configs["early_stopping"]
         self.hyperparameters = vae_configs["hyperparameters"]
@@ -48,7 +51,7 @@ class TrainVAE:
                             run_vae(data_filters=self.data_filters, task_type="train_vae")
 
         # Set hyperparameters for model creation
-        self.num_epochs = self.epochs
+        self.num_epochs = 10 if self.experiment_mode else vae_configs["epochs"]
         self.vocab_size = len(self.char2idx)
         self.batch_size = self.hyperparameters["batch_size"]
         self.embedding_dim = self.hyperparameters["embedding_dim"]
@@ -75,10 +78,11 @@ class TrainVAE:
             entity="divyanshubhati",
             project="PD_VAE_PRE_TRAINING",
             config={
+                "tags": ["experiment"] if self.experiment_mode else ["full_run"],
                 "learning_rate": self.learning_rate,
                 "batch_size": self.batch_size,
                 "latent_dim": self.latent_dim,
-                "epochs": self.epochs,
+                "epochs": self.num_epochs,
                 "dataset": "kaggle/arhamrumi/amazon-product-reviews/",
                 "architecture": "MLP-VAE",
                 "notes": "Testing pipeline with sample data and epochs"
@@ -127,7 +131,7 @@ class TrainVAE:
                                                                 T_max=self.num_epochs,
                                                                 eta_min=1e-6)
         criterion = nn.CrossEntropyLoss(reduction='mean', ignore_index=0)  # Ignores the padded token while calculating loss. In sum vs mean -> ELBO expects reconstruction loss to be summed over the logs, mean will introduce scale variance.
-        # TODO major: Add static kl_beta or a scheduler to about KL divergence and prevent it from overpowering the RL
+        # TODO: Add static kl_beta or a scheduler to about KL divergence and prevent it from overpowering the RL
         
         print("Beginning VAE training for", self.num_epochs, "epochs...")
         self.vae_model.train()
@@ -261,4 +265,7 @@ class TrainVAE:
         self.wandb_run.finish()
 
 if __name__ == "__main__":
-    TrainVAE().train_vae_model()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--experiment', action='store_true', help='Run small sample/fewer epochs')
+    args = parser.parse_args()
+    TrainVAE(experiment_mode=args.experiment).train_vae_model()
