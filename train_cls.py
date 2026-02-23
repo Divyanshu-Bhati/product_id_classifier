@@ -44,7 +44,8 @@ class TrainCLS:
         # Initialize DataCreator
         self.data_creator = DataCreator(input_path=self.input_path,
                                         training_history=self.training_history,
-                                        seed=self.random_seed)
+                                        seed=self.random_seed,
+                                        experiment_mode=self.experiment_mode)
         
         # Load fixed vocabulary and training max length.
         self.train_max_length, self.char2idx, self.idx2char = self.data_creator.load_training_vocab()

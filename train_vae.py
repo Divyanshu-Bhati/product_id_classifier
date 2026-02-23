@@ -1,3 +1,4 @@
+import gc
 import os
 import glob
 import json
@@ -47,7 +48,7 @@ class TrainVAE:
          self.X_val_padded,
          self.y_val,
          self.char2idx,
-         self.idx2char) = DataCreator(input_path=self.input_path, training_history=self.training_history, seed=self.random_seed). \
+         self.idx2char) = DataCreator(input_path=self.input_path, training_history=self.training_history, seed=self.random_see, experiment_mode=self.experiment_mode). \
                             run_vae(data_filters=self.data_filters, task_type="train_vae")
 
         # Set hyperparameters for model creation
@@ -214,6 +215,11 @@ class TrainVAE:
                 print(f"VAE Val Loss: {avg_val_loss:.4f}")
                 print(f"Mean Recon Error (Valid IDs): {avg_pos_err:.4f}")
                 print(f"Mean Recon Error (Negative): {avg_neg_err:.4f}")
+                
+                # Cleaning up val metrics from memory
+                del pos_errors, neg_errors, per_sample_recon, recon_logits
+                torch.cuda.empty_cache()
+                gc.collect()
 
                 # Log epoch metrics.
                 logs_list.append({
