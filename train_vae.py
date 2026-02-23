@@ -48,7 +48,7 @@ class TrainVAE:
          self.X_val_padded,
          self.y_val,
          self.char2idx,
-         self.idx2char) = DataCreator(input_path=self.input_path, training_history=self.training_history, seed=self.random_see, experiment_mode=self.experiment_mode). \
+         self.idx2char) = DataCreator(input_path=self.input_path, training_history=self.training_history, seed=self.random_seed, experiment_mode=self.experiment_mode). \
                             run_vae(data_filters=self.data_filters, task_type="train_vae")
 
         # Set hyperparameters for model creation
@@ -142,7 +142,7 @@ class TrainVAE:
         # Add PyTorch profiler
         with torch.profiler.profile(
             activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA], # Add metal for mac runs?
-            schedule=torch.profiler.schedule(wait=1, warmup=1, active=1), # using it only for first few epochs to identify performance bottlenecks
+            schedule=torch.profiler.schedule(wait=1, warmup=1, active=2), # using it only for first few epochs to identify performance bottlenecks
             on_trace_ready=torch.profiler.tensorboard_trace_handler('./training_history/profiler_logs'),
             record_shapes=True,
             with_stack=True
@@ -174,6 +174,8 @@ class TrainVAE:
                     epoch_loss += loss.item()
                     epoch_recon_loss += recon_loss.item()
                     epoch_kl_loss += kl_loss.item()
+                    
+                    prof.step() # Update the profiler after every batch (upto max batches)
 
                 num_batches = len(train_dataloader)
                 avg_train_loss = epoch_loss / num_batches
@@ -215,11 +217,6 @@ class TrainVAE:
                 print(f"VAE Val Loss: {avg_val_loss:.4f}")
                 print(f"Mean Recon Error (Valid IDs): {avg_pos_err:.4f}")
                 print(f"Mean Recon Error (Negative): {avg_neg_err:.4f}")
-                
-                # Cleaning up val metrics from memory
-                del pos_errors, neg_errors, per_sample_recon, recon_logits
-                torch.cuda.empty_cache()
-                gc.collect()
 
                 # Log epoch metrics.
                 logs_list.append({
@@ -231,7 +228,7 @@ class TrainVAE:
                     "val_pos_recon_error": avg_pos_err,
                     "val_neg_recon_error": avg_neg_err
                 })
-
+                
                 # Remove existing training weight files (to keep only the latest).
                 for file in glob.glob(os.path.join(training_weights_dir, "training_vae_weights_epoch_*.pth")):
                     os.remove(file)
@@ -263,7 +260,11 @@ class TrainVAE:
                         "neg_recon_error": avg_neg_err,
                         "lr": optimizer.param_groups[0]['lr']
                     })
-                prof.step() # Update the profiler
+                
+                # Cleaning up val metrics from memory, after logging
+                del avg_pos_err, avg_neg_err, per_sample_recon, recon_logits
+                torch.cuda.empty_cache()
+                gc.collect()
 
             # Save final weights and logs.
             df_logs = pd.DataFrame(logs_list)
