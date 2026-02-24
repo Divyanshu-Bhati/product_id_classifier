@@ -15,21 +15,24 @@
         "hyperparameters": 
         {
             "batch_size": 2048,
-            "embedding_dim": 64,
-            "latent_dim": 128,
-            "hidden_dim": 128,
-            "learning_rate": 0.001,
-            "patience": 10
+            "embedding_dim": 32,
+            "latent_dim": 64,
+            "hidden_dim": 256,
+            "learning_rate": 0.0005,
+            "patience": 10,
+            "l1_lambda": 0.00001,
+            "kl_beta": 0.01
         }
     },
     "cls_configs": {
         "epochs": 100,
-        "num_workers": 0,
+        "early_stopping": true,
         "hyperparameters":
         {
-            "batch_size": 2048,
+            "batch_size": 4096,
             "learning_rate": 0.001,
-            "patience": 10
+            "patience": 10,
+            "l1_lambda": 0.00001
         }
     }
 }

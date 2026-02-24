@@ -113,7 +113,7 @@ class TrainVAE:
         os.makedirs(best_weights_dir, exist_ok=True)
         os.makedirs(logs_dir, exist_ok=True)
 
-        best_val_loss = float('inf')
+        best_recon_gap = 0
         start_epoch = 0
         if self.continue_training:
             files = [f for f in os.listdir(training_weights_dir)
@@ -132,7 +132,7 @@ class TrainVAE:
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, # Need schedular to deal with posterior collapse aka learning the whole space TODO
                                                                 T_max=self.num_epochs,
                                                                 eta_min=1e-6)
-        criterion = nn.CrossEntropyLoss(reduction='mean', ignore_index=0)  # Ignores the padded token while calculating loss. In sum vs mean -> ELBO expects reconstruction loss to be summed over the logs, mean will introduce scale variance.
+        criterion = nn.CrossEntropyLoss(reduction='sum', ignore_index=0)  # Ignores the padded token while calculating loss. In sum vs mean -> ELBO expects reconstruction loss to be summed over the logs, mean will introduce scale variance.
         # TODO: Add static kl_beta or a scheduler to about KL divergence and prevent it from overpowering the RL
         
         print("Beginning VAE training for", self.num_epochs, "epochs...")
@@ -159,14 +159,16 @@ class TrainVAE:
                     recon_logits, z_mean, z_log_var = self.vae_model(x)
                     recon_logits = recon_logits.view(-1, self.vocab_size)
                     x_flat = x.view(-1)
-                    recon_loss = criterion(recon_logits, x_flat) # Mean over all errors for each batch
-                    kl_loss = -0.5 * torch.mean(1 + z_log_var - z_mean.pow(2) - torch.exp(z_log_var)) # Mean over entire latent space
-                    loss = (recon_loss + kl_loss) # / x.size(0) # Averaged over batch size for each batch, already taken mean
+                    recon_loss = criterion(recon_logits, x_flat)
+                    kl_loss = -0.5 * torch.sum(1 + z_log_var - z_mean.pow(2) - torch.exp(z_log_var)) # Sum of all errors
+                    
+                    kl_beta = self.hyperparameters.get("kl_beta", 0.1) # To normalize the contribution of KL loss
+                    loss = (recon_loss + (kl_beta * kl_loss)) / x.size(0) # Sum averaged over batch size to get every loss
 
-                    # L1 regularization. # TODO
+                    # L1 regularization: max ceiling 0.0001 -> taking a small value from hyperparams
                     l1_lambda = self.hyperparameters.get("l1_lambda", 0.0)
                     if l1_lambda > 0:
-                        l1_norm = sum(p.abs().sum() for p in self.vae_model.parameters())
+                        l1_norm = sum(p.abs().sum() for name, p in self.vae_model.named_parameters() if 'weight' in name) # Applied only on weights on linear layers
                         loss = loss + l1_lambda * l1_norm
 
                     loss.backward()
@@ -187,7 +189,7 @@ class TrainVAE:
                 # Validation loop
                 self.vae_model.eval()
                 val_loss = 0
-                total_val_samples = len(val_dataloader.dataset)
+                
                 # Tracking error by class (y=1 vs y=0)
                 pos_sum, pos_count = 0, 0
                 neg_sum, neg_count = 0, 0
@@ -197,12 +199,12 @@ class TrainVAE:
                         x_val = batch[0].to(self.device)
                         y_val = batch[1].to(self.device)
                         recon_logits, mu, logvar = self.vae_model(x_val)
-                        recon_loss = criterion(recon_logits.view(-1, self.vocab_size), x_val.view(-1))
-                        kl_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
-                        val_loss += (recon_loss.item() + kl_loss.item()) # Accumulate total sum
+                        b_recon = criterion(recon_logits.view(-1, self.vocab_size), x_val.view(-1))
+                        b_kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+                        val_loss += (b_recon.item() + (kl_beta * b_kl_loss.item())) / x_val.size(0) # Accumulate total sum over batch
                         per_sample_recon = F.cross_entropy(
                             recon_logits.transpose(1, 2), x_val, reduction='none', ignore_index=0
-                        ).sum(dim=1)
+                        ).sum(dim=1) # reduction 'none' keeps the loss per sample, instead of averaging it out
                         
                         pos_batch = per_sample_recon[y_val == 1]
                         neg_batch = per_sample_recon[y_val == 0]
@@ -211,9 +213,10 @@ class TrainVAE:
                         neg_sum += neg_batch.sum().item()
                         neg_count += neg_batch.size(0)
                         
-                avg_val_loss = val_loss / total_val_samples
+                avg_val_loss = val_loss / len(val_dataloader)
                 avg_pos_err = pos_sum / pos_count if pos_count > 0 else 0
                 avg_neg_err = neg_sum / neg_count if neg_count > 0 else 0
+                current_recon_gap = avg_neg_err - avg_pos_err
 
                 print(f"VAE Val Loss: {avg_val_loss:.4f}")
                 print(f"Mean Recon Error (Valid IDs): {avg_pos_err:.4f}")
@@ -237,11 +240,11 @@ class TrainVAE:
                 torch.save(self.vae_model.state_dict(), latest_weights_file)
 
                 # Save best weights if improved.
-                if avg_val_loss < best_val_loss:
-                    best_val_loss = avg_val_loss
+                if current_recon_gap > best_recon_gap and avg_pos_err < avg_neg_err: # We optimize the growing difference between positive errors and negative errors, while ensuring that pos error remains smaller than neg error
+                    best_recon_gap = current_recon_gap
                     best_weights_file = os.path.join(best_weights_dir, "vae_best_weight.pth")
                     torch.save(self.vae_model.state_dict(), best_weights_file)
-                    print("Best weight updated with validation loss:", best_val_loss)
+                    print("Best weight updated with largest recon gap:", best_recon_gap)
                     no_improve_count = 0
                 else:
                     no_improve_count += 1
