@@ -36,10 +36,12 @@ class TrainCLS:
         
         # Classifier hyperparameters
         cls_configs = config["cls_configs"]
+        self.hyperparameters = cls_configs["hyperparameters"]
         self.epochs = 10 if self.experiment_mode else cls_configs["epochs"]
-        self.num_workers = 2 if self.experiment_mode else cls_configs["num_workers"]
         self.learning_rate = cls_configs["hyperparameters"]["learning_rate"]
         self.batch_size = 512 if self.experiment_mode else cls_configs["hyperparameters"]["batch_size"]
+        self.early_stopping = cls_configs["early_stopping"]
+        self.patience = cls_configs["hyperparameters"]["patience"]
         
         torch.manual_seed(self.random_seed)
         np.random.seed(self.random_seed)
@@ -122,10 +124,13 @@ class TrainCLS:
             additional_features.append([char_count / L, num_count / L, spcl_count / L])
         additional_features = torch.tensor(additional_features, dtype=torch.float32).to(self.device)
 
-        # Assemble all scores in a vector (used as input for ClassifierHead)
+        # Assemble all scores in a vector (used as input for ClassifierHead): Normalized to account for difference in RL, KL vs other parameters
         score_vector = torch.cat([
-            recon_loss_per_sample.unsqueeze(1),
-            kl_loss.unsqueeze(1),
+            # Log transform reduces the gap between RL and KL signals
+            torch.log1p(recon_loss_per_sample).unsqueeze(1), 
+            torch.log1p(kl_loss).unsqueeze(1),
+            z_mean,
+            z_log_var,
             additional_features
         ], dim=1)
 
@@ -179,18 +184,18 @@ class TrainCLS:
         eval_score_vector = (eval_score_vector - mean) / std
         train_ds = TensorDataset(train_score_vector, train_labels)
         eval_ds = TensorDataset(eval_score_vector, eval_labels)
-        train_dataloader = DataLoader(train_ds, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
-        eval_dataloader = DataLoader(eval_ds, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
+        train_dataloader = DataLoader(train_ds, batch_size=self.batch_size, shuffle=True)
+        eval_dataloader = DataLoader(eval_ds, batch_size=self.batch_size, shuffle=False)
         
         # Freeze the VAE
         for param in self.vae_model.parameters():
             param.requires_grad = False
         
         # Set up classifier
-        classifier_model = ClassifierHead(input_dim=train_score_vector.size(1)).to(self.device)  # input dimension of ClassifierHead should match the score dimensions; fails if losses have a large difference -> standardized in above step
+        classifier_model = ClassifierHead(train_score_vector.size(1)).to(self.device)  # input dimension of ClassifierHead should match the score dimensions; fails if losses have a large difference -> standardized in above step
         optimizer = torch.optim.AdamW(classifier_model.parameters(), lr=self.learning_rate, weight_decay=1e-4)
-        criterion = nn.BCELoss()
-        l1_lambda = 1e-5 # Strength of L1 regularization
+        criterion = nn.BCEWithLogitsLoss() # nn.BCELoss() # BCE does not perform well if sigmoid is separate -> logits combines sigmoid within BCE
+        l1_lambda = self.hyperparameters["l1_lambda"] # Strength of L1 regularization
         best_val_loss = float('inf')
         cls_weights_dir = os.path.join(self.training_history, "weights")
         local_log_path = os.path.join(self.training_history, "local_logs", "cls_training_metrics.csv")
@@ -200,6 +205,8 @@ class TrainCLS:
         
         with open(local_log_path, "w") as f:
             f.write(",".join(csv_headers) + "\n")
+            
+        no_improve_count = 0
 
         print("Training classifier head...")
         with torch.profiler.profile(
@@ -215,12 +222,14 @@ class TrainCLS:
                 
                 for batch in tqdm(train_dataloader, desc=f"Training", leave=False):
                     x_batch, y_batch = batch[0].to(self.device), batch[1].to(self.device)
-                    optimizer.zero_grad()
+                    optimizer.zero_grad() # Reset gradients
+                    
                     outputs = classifier_model(x_batch).squeeze()
                     loss = criterion(outputs, y_batch)
                     
                     # L1 Regularization
-                    l1_norm = sum(p.abs().sum() for p in classifier_model.parameters())
+                    l1_norm = sum(p.abs().sum() for name, p in classifier_model.named_parameters() 
+                                    if 'weight' in name and 'bn' not in name) # Exclude BatchNorm & Linear layers
                     loss = loss + l1_lambda * l1_norm
 
                     loss.backward()
@@ -235,10 +244,12 @@ class TrainCLS:
                 
                 with torch.no_grad():
                     for x_val, y_val in eval_dataloader:
-                        val_outputs = classifier_model(x_val).squeeze()
+                        val_outputs = classifier_model(x_val).squeeze(-1) # squeeze dimension -1
                         val_loss += criterion(val_outputs, y_val).item()
                         
-                        preds = (val_outputs > 0.5).float()
+                        # Raw logits -> apply sigmoid
+                        val_probs = torch.sigmoid(val_outputs)
+                        preds = (val_probs > 0.5).float()
                         correct += (preds == y_val).sum().item()
                         total += y_val.size(0)
                         all_preds.extend(preds.cpu().numpy())
@@ -276,6 +287,13 @@ class TrainCLS:
                     best_val_loss = avg_val_loss
                     best_path = os.path.join(cls_weights_dir, "best_weights", "cls_best_weight.pth")
                     torch.save(classifier_model.state_dict(), best_path)
+                    print(f"Weights saved with best val loss: {best_val_loss:.4f}")
+                    no_improve_count = 0
+                else:
+                    no_improve_count += 1
+                    if self.early_stopping and no_improve_count >= self.patience:
+                        print(f"Early stopping triggered. No improvement for {self.patience} epochs.")
+                        break
                     
             # Evaluation metrics
             best_path = os.path.join(cls_weights_dir, "best_weights", "cls_best_weight.pth")
@@ -292,7 +310,7 @@ class TrainCLS:
                 for x_val, y_val in eval_dataloader:
                     probs = classifier_model(x_val).squeeze()
                     all_probs.extend(probs.cpu().numpy())
-                    all_preds.extend((probs > 0.5).float().cpu().numpy())
+                    all_preds.extend((probs > 0.9).float().cpu().numpy())
                     all_labels_list.extend(y_val.cpu().numpy())
 
             precision, recall, f1, _ = precision_recall_fscore_support(all_labels_list, all_preds, average='binary')
@@ -306,11 +324,11 @@ class TrainCLS:
             print(f"Recall:        {recall:.4f}")
             print(f"F1 Score:      {f1:.4f}")
             print("-" * 40)
-
+            
             # Feature Importance (Weight Inspection): the first layer (fc1) weights represents sparsity from L1 regularization
             first_layer_weights = classifier_model.fc1.weight.data
             feature_importance = torch.mean(torch.abs(first_layer_weights), dim=0)
-            feature_names = ["Recon Error", "KL Loss", "Char Ratio", "Num Ratio", "Special Ratio"]
+            feature_names = ["Recon Error", "KL Loss", "z_mean", "z_log_var", "Char Ratio", "Num Ratio", "Special Ratio"]
             
             print("FEATURE IMPORTANCE (Avg Abs Weight):")
             for name, weight in zip(feature_names, feature_importance):
@@ -327,11 +345,11 @@ class TrainCLS:
                     probs=None,
                     y_true=all_labels,
                     preds=all_preds,
-                    class_names=["Fraud", "Valid"]
+                    class_names=["Invalid", "Valid"]
                 )
             })
             cm = confusion_matrix(all_labels, all_preds)
-            self.display_confusion_matrix(cm, ["Fraud (no)", "Valid (yes)"])
+            self.display_confusion_matrix(cm, ["Invalid (no)", "Valid (yes)"])
 
         print("Classifier training complete.")
         self.wandb_run.finish()
