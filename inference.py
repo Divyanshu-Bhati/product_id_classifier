@@ -68,8 +68,7 @@ class Inference:
         return model
 
     def _load_classifier(self):
-        # Input dim is 5: [Recon, KL, Char%, Num%, Spcl%] # TODO: Make this dynamic
-        model = ClassifierHead(input_dim=5).to(self.device)
+        model = ClassifierHead(input_dim=133).to(self.device)
         path = os.path.join(self.training_history, "weights", "best_weights", "cls_best_weight.pth")
         model.load_state_dict(torch.load(path, map_location=self.device))
         model.eval()
@@ -118,8 +117,10 @@ class Inference:
 
         # Assemble all scores in a vector (used as input for ClassifierHead)
         score_vector = torch.cat([
-            recon_loss_per_sample.unsqueeze(1),
-            kl_loss.unsqueeze(1),
+            torch.log1p(recon_loss_per_sample).unsqueeze(1), 
+            torch.log1p(kl_loss).unsqueeze(1),
+            z_mean,
+            z_log_var,
             additional_features
         ], dim=1)
 
@@ -189,9 +190,11 @@ class Inference:
                 with torch.no_grad():
                     for batch in tqdm(loader, desc=f"Inference"):
                         x = batch[0].to(self.device)
-                        outputs = self.classifier(x).squeeze(-1)
-                        if outputs.dim() == 0: outputs = outputs.unsqueeze(0)
-                        labels = ["yes" if p >= 0.5 else "no" for p in outputs.cpu().numpy()]
+                        
+                        logits = self.classifier(x).squeeze(-1)
+                        if logits.dim() == 0: logits = logits.unsqueeze(0)
+                        probs = torch.sigmoid(logits)
+                        labels = ["yes" if p >= 0.5 else "no" for p in probs.cpu().numpy()]
                         processed_preds.extend(labels)
                         prof.step()
                         
@@ -299,6 +302,6 @@ if __name__ == "__main__":
     inf.run_final_test()
     
     # Begin custom inference
-    sample_data = ["ABC-123456", "INVALID!!!@@@", "1234"]
+    sample_data = ["B001L6FPTI", "ABC-123456", "INVALID!!!@@@", "1234"]
     predictions = inf.batch_inference(sample_data, batch_size=32)
     pprint.pprint(predictions.head())
