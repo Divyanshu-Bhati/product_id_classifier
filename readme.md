@@ -1,6 +1,6 @@
 # Product ID Anomaly Detection: A Hybrid VAE-Classifier Approach
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Divyanshu-Bhati/product_id_classifier/blob/main/notebooks/colab_run.ipynb)
+Click the icon to Quick Start (in Google Colab): [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Divyanshu-Bhati/product_id_classifier/blob/main/notebooks/colab_run.ipynb)
 
 ## 1. Problem Statement & Business Use Case
 

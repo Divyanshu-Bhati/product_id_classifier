@@ -234,8 +234,8 @@ class Inference:
     def _save_local_report(self, cm, acc, prec, rec, f1, auc):
         plt.figure(figsize=(8, 6))
         sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
-                    xticklabels=['Predicted Fraud', 'Predicted Valid'],
-                    yticklabels=['Actual Fraud', 'Actual Valid'])
+                    xticklabels=['Predicted Invalid', 'Predicted Valid'],
+                    yticklabels=['Actual Invalid', 'Actual Valid'])
         plt.title(f'Final Confusion Matrix\nAccuracy: {acc:.4f} | AUC: {auc:.4f}')
         plt.ylabel('True Label')
         plt.xlabel('Predicted Label')

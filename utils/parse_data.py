@@ -131,7 +131,7 @@ class DataCreator:
         data = self.load_data(data_filters=data_filters, task_type=task_type)
         X_train, X_val, y_val = data["X_train"], data["X_eval"], data["y_eval"]
         max_length = max(len(str(x)) for x in X_train)
-        print("Max seq len:", max_length, "found for MPN:", max(X_train, key=lambda x: len(str(x))))
+        print("Max seq len:", max_length, "found for ID:", max(X_train, key=lambda x: len(str(x))))
         X_train_padded, X_val_padded, char2idx, idx2char = self.vae_feature_engineer(X_train, X_val, max_length)
         # Save vocabulary (with training max_length) for inference consistency.
         vocab_path = os.path.join(self.training_history, "vocab.json")
