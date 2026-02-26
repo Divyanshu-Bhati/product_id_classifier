@@ -12,7 +12,8 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 
 # Enable cuDNN benchmark for consistent input sizes BEFORE loading the VAE
-torch.backends.cudnn.benchmark = True
+if torch.cuda.is_available():
+    torch.backends.cudnn.benchmark = True
 
 from core.vae.custom_vae_model import VAE
 from utils.parse_data import DataCreator
@@ -62,8 +63,13 @@ class TrainVAE:
         self.learning_rate = self.hyperparameters["learning_rate"]
         self.patience = self.hyperparameters["patience"]
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print("Device:", self.device)
+        if torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+        elif torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
+        print(f"Using device: {self.device}")
         
         # Initialize the VAE model.
         print("Initializing the VAE model...")
@@ -93,17 +99,18 @@ class TrainVAE:
     
     def train_vae_model(self):
         print("Starting VAE pre-training...")
+        use_pin_memory = True if torch.cuda.is_available() else False
 
         # Create DataLoaders for training and validation.
         print("Creating DataLoaders...")
         train_tensor = torch.tensor(self.X_train_padded, dtype=torch.long)
         train_dataset = TensorDataset(train_tensor)
-        train_dataloader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, pin_memory=True) # TODO pin memory
+        train_dataloader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, pin_memory=use_pin_memory)
 
         val_x_tensor = torch.tensor(self.X_val_padded, dtype=torch.long)
         val_y_tensor = torch.tensor(self.y_val, dtype=torch.float)
         val_dataset = TensorDataset(val_x_tensor, val_y_tensor)
-        val_dataloader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=True)
+        val_dataloader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=use_pin_memory)
                             
         # Directories for saving weights and logs.
         training_weights_dir = os.path.join(self.training_history, "weights")  # root folder for storing training weights
@@ -125,15 +132,14 @@ class TrainVAE:
                 self.vae_model.load_state_dict(torch.load(latest_weights_file, map_location=self.device))
                 print(f"Continuing VAE training from epoch: {start_epoch}")
 
-        # Using AdamW with L2 regularization (L2 weight decay, decoupled from gradient update) and set up a cosine annealing scheduler. # TODO
+        # Using AdamW with L2 regularization (L2 weight decay, decoupled from gradient update) and set up a cosine annealing scheduler.
         optimizer = torch.optim.AdamW(self.vae_model.parameters(),
                                         lr=self.learning_rate,
                                         weight_decay=self.hyperparameters.get("l2_lambda", 0.0))
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, # Need schedular to deal with posterior collapse aka learning the whole space TODO
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, # Need schedular to deal with posterior collapse (model learning the whole space)
                                                                 T_max=self.num_epochs,
                                                                 eta_min=1e-6)
         criterion = nn.CrossEntropyLoss(reduction='sum', ignore_index=0)  # Ignores the padded token while calculating loss. In sum vs mean -> ELBO expects reconstruction loss to be summed over the logs, mean will introduce scale variance.
-        # TODO: Add static kl_beta or a scheduler to about KL divergence and prevent it from overpowering the RL
         
         print("Beginning VAE training for", self.num_epochs, "epochs...")
         self.vae_model.train()
@@ -141,8 +147,11 @@ class TrainVAE:
         logs_list = []
         
         # Add PyTorch profiler
+        profiler_activities = [torch.profiler.ProfilerActivity.CPU] # Automatically tracks MPS activity for MacOS
+        if torch.cuda.is_available():
+            profiler_activities.append(torch.profiler.ProfilerActivity.CUDA)
         with torch.profiler.profile(
-            activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA], # Add metal for mac runs?
+            activities=profiler_activities,
             schedule=torch.profiler.schedule(wait=1, warmup=1, active=2), # using it only for first few epochs to identify performance bottlenecks
             on_trace_ready=torch.profiler.tensorboard_trace_handler('./training_history/profiler_logs'),
             record_shapes=True,
@@ -267,7 +276,10 @@ class TrainVAE:
                 
                 # Cleaning up val metrics from memory, after logging
                 del avg_pos_err, avg_neg_err, per_sample_recon, recon_logits
-                torch.cuda.empty_cache()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                elif torch.backends.mps.is_available():
+                    torch.mps.empty_cache()
                 gc.collect()
 
             # Save final weights and logs.

@@ -17,7 +17,7 @@ class ClassifierHead(nn.Module):
         # Layer 2: Feature refinement
         self.fc2 = nn.Linear(128, 64)
         self.bn2 = nn.BatchNorm1d(64)
-        self.act2 = nn.LeakyReLU(0.1) # TODO vs ReLU
+        self.act2 = nn.LeakyReLU(0.1)
         self.dropout2 = nn.Dropout(0.2)
         
         # Layer 3: Output projection

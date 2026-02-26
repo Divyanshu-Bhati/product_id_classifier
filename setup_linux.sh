@@ -3,10 +3,10 @@
 # Create environment
 VENV_NAME=".cls_venv"
 PYTHON_RW_VERSION="3.10"
-echo "Starting setup..."
+echo "Starting Linux setup..."
 
 if ! command -v python$PYTHON_RW_VERSION &> /dev/null; then
-    echo "❌ Error: Python $PYTHON_RW_VERSION not found."
+    echo "Error: Python $PYTHON_RW_VERSION not found."
     exit 1
 fi
 if [ ! -d "$VENV_NAME" ]; then
@@ -16,15 +16,18 @@ fi
 source $VENV_NAME/bin/activate
 
 # Installing Dependencies
-echo "Upgrading pip and installing Torch with CUDA 12.6..."
+echo "Upgrading pip and installing requrements (CUDA support)..."
 pip install --upgrade pip==26.0.1
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
-if [ -f "requirements.txt" ]; then
-    echo "Installing requirements..."
-    pip install -r requirements.txt
+if [ -f "requirements_linux.txt" ]; then
+    pip install -r requirements_linux.txt
 fi
 
 # WandB config
 echo "Setting wandb to offline mode (default)..."
 export WANDB_MODE=offline
 wandb offline
+
+source $VENV_NAME/bin/activate
+
+echo "Setup complete! Activate your environment, if not already activated, with: source $VENV_NAME/bin/activate"

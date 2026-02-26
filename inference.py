@@ -1,14 +1,16 @@
 import os
 import json
 from tqdm import tqdm
+
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support, roc_auc_score, confusion_matrix
+import matplotlib
+matplotlib.use('Agg') # Use the non-GUI backend for saving plots, disable to show plots
+import matplotlib.pyplot as plt
+import seaborn as sns
 import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
-
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support, roc_auc_score, confusion_matrix
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 from utils.parse_data import DataCreator
 from core.classifier.classifier_head import ClassifierHead
@@ -20,7 +22,13 @@ warnings.filterwarnings("ignore", message=".*Profiler clears events at the end o
 
 class Inference:
     def __init__(self):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+        elif torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
+        print(f"Using device: {self.device}")
         
         with open("utils/configs.json", "r") as f:
             self.config = json.load(f)
@@ -79,9 +87,11 @@ class Inference:
         Uses the pretrained VAE to extract the following five scores (one per sample):
          1. recon_error: average cross-entropy loss.
          2. kl_loss: average KL divergence.
-         3. char_ratio: fraction of alphabetic characters.
-         4. num_ratio: fraction of numeric characters.
-         5. spcl_char_ratio: fraction of special characters.
+         3. z_mean: mean of latent space.
+         4. z_log_var: log variance of latent space.
+         5. char_ratio: fraction of alphabetic characters.
+         6. num_ratio: fraction of numeric characters.
+         7. spcl_char_ratio: fraction of special characters.
         Also returns for debugging & error analysis:
          - hybrid_score = recon_error + kl_loss.
          - reconstructions: list of decoded strings.
@@ -165,6 +175,9 @@ class Inference:
         Output: list of 'yes'/'no' predictions
         Note: Works for single inputs (data_list=['string']) or large batches. Set batch size to 32 default.
         """
+        if isinstance(data_list, pd.Series):
+            data_list = data_list.tolist()
+        
         print("Running inference...")
         mask = self.filter_inference_list(data_list, self.data_filters)
         
@@ -180,8 +193,11 @@ class Inference:
             loader = DataLoader(ds, batch_size=batch_size, shuffle=False)
             
             processed_preds = []
+            profiler_activities = [torch.profiler.ProfilerActivity.CPU] # Automatically tracks MPS activity for MacOS
+            if torch.cuda.is_available():
+                profiler_activities.append(torch.profiler.ProfilerActivity.CUDA)
             with torch.profiler.profile(
-                activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
+                activities=profiler_activities,
                 schedule=torch.profiler.schedule(wait=1, warmup=1, active=3),
                 on_trace_ready=torch.profiler.tensorboard_trace_handler('./training_history/profiler_logs'),
                 record_shapes=True,
@@ -203,7 +219,7 @@ class Inference:
 
         final_preds = [results_map[i] for i in range(len(data_list))]        
         df = pd.DataFrame({
-            "input_mpn": data_list,
+            "input_id": data_list,
             "prediction": final_preds
         })
 
@@ -298,10 +314,15 @@ if __name__ == "__main__":
     import pprint
     
     inf = Inference()
-    # Begin test
-    inf.run_final_test()
-    
-    # Begin custom inference
-    sample_data = ["B001L6FPTI", "ABC-123456", "INVALID!!!@@@", "1234"]
+    try:
+        # Begin custom inference
+        custom_data_df = pd.read_csv(os.path.join("data", "custom_data.csv"))
+        sample_data = custom_data_df["input_id"].tolist()
+    except:
+        # If no custom data provided, first run test pipeline and hit batch inference using a sample list
+        # Begin test
+        inf.run_final_test()
+        sample_data = ["B001L6FPTI", "ABC-123456", "INVALID!!!@@@", "1234"]    
+        
     predictions = inf.batch_inference(sample_data, batch_size=32)
     pprint.pprint(predictions.head())

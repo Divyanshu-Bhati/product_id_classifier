@@ -130,8 +130,8 @@ class DataCreator:
     def run_vae(self, data_filters, task_type):
         data = self.load_data(data_filters=data_filters, task_type=task_type)
         X_train, X_val, y_val = data["X_train"], data["X_eval"], data["y_eval"]
-        max_length = max(len(x) for x in X_train)
-        print("Max seq len:", max_length, "found for MPN:", max(X_train, key=len))
+        max_length = max(len(str(x)) for x in X_train)
+        print("Max seq len:", max_length, "found for MPN:", max(X_train, key=lambda x: len(str(x))))
         X_train_padded, X_val_padded, char2idx, idx2char = self.vae_feature_engineer(X_train, X_val, max_length)
         # Save vocabulary (with training max_length) for inference consistency.
         vocab_path = os.path.join(self.training_history, "vocab.json")
@@ -168,7 +168,7 @@ class DataCreator:
         # Encodes and pads (or truncates) the provided list to the fixed training max_length.
         def encode_sequence(code, char2idx):
             unk_id = char2idx.get("<UNK>", 1)
-            return [char2idx.get(ch, unk_id) for ch in code]
+            return [char2idx.get(ch, unk_id) for ch in str(code)]
         all_encoded = [encode_sequence(x, char2idx) for x in data_list]
         padded = np.zeros((len(all_encoded), fixed_max_length), dtype=np.int64)
         for i, seq in enumerate(all_encoded):

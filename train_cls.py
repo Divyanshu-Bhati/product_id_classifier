@@ -12,8 +12,9 @@ import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 
 # Enable cuDNN benchmark for consistent input sizes BEFORE loading the VAE
-torch.backends.cudnn.benchmark = True
-
+if torch.cuda.is_available():
+    torch.backends.cudnn.benchmark = True
+    
 from utils.parse_data import DataCreator
 from core.vae.custom_vae_model import VAE
 from core.classifier.classifier_head import ClassifierHead
@@ -30,7 +31,13 @@ class TrainCLS:
             config = json.load(f)
         self.input_path = config["inputs_path"]
         self.random_seed = config["random_seed"]
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+        elif torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
+        print(f"Using device: {self.device}")
         self.training_history = config["training_history"]
         self.data_filters = config["data_filters"]
         
@@ -88,9 +95,11 @@ class TrainCLS:
         Uses the pretrained VAE to extract the following five scores (one per sample):
          1. recon_error: average cross-entropy loss.
          2. kl_loss: average KL divergence.
-         3. char_ratio: fraction of alphabetic characters.
-         4. num_ratio: fraction of numeric characters.
-         5. spcl_char_ratio: fraction of special characters.
+         3. z_mean: mean of latent space.
+         4. z_log_var: log variance of latent space.
+         5. char_ratio: fraction of alphabetic characters.
+         6. num_ratio: fraction of numeric characters.
+         7. spcl_char_ratio: fraction of special characters.
         Also returns for debugging & error analysis:
          - hybrid_score = recon_error + kl_loss.
          - reconstructions: list of decoded strings.
@@ -209,8 +218,11 @@ class TrainCLS:
         no_improve_count = 0
 
         print("Training classifier head...")
+        profiler_activities = [torch.profiler.ProfilerActivity.CPU] # Automatically tracks MPS activity for MacOS
+        if torch.cuda.is_available():
+            profiler_activities.append(torch.profiler.ProfilerActivity.CUDA)
         with torch.profiler.profile(
-            activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
+            activities=profiler_activities,
             schedule=torch.profiler.schedule(wait=1, warmup=1, active=3),
             on_trace_ready=torch.profiler.tensorboard_trace_handler('./training_history/profiler_logs'),
             record_shapes=True,
@@ -343,12 +355,12 @@ class TrainCLS:
                 "final/f1": f1,
                 "final/conf_mat": wandb.plot.confusion_matrix(
                     probs=None,
-                    y_true=all_labels,
+                    y_true=all_labels_list,
                     preds=all_preds,
                     class_names=["Invalid", "Valid"]
                 )
             })
-            cm = confusion_matrix(all_labels, all_preds)
+            cm = confusion_matrix(all_labels_list, all_preds)
             self.display_confusion_matrix(cm, ["Invalid (no)", "Valid (yes)"])
 
         print("Classifier training complete.")
