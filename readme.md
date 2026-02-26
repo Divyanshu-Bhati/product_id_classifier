@@ -27,7 +27,7 @@ Download and store them in the following directories respectively:
 
 *Note 1: Re-training the model will rewrite all above mentioned files, please create backups if needed.*
 
-*Note 2: If you do not download these files, pelase run the training scripts first. `inference.py` requires weights.*
+*Note 2: If you do not download these files, pelase run the training scripts first (VAE &rarr; CLS). `inference.py` requires weights.*
 
 Then, run the following commands:
 #### For Linux-based systems (WSL2, Ubuntu, etc.):
