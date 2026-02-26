@@ -70,15 +70,21 @@ class Inference:
             max_length=self.train_max_length
         ).to(self.device)
         
-        path = os.path.join(self.training_history, "weights", "best_weights", "vae_best_weight.pth")
-        model.load_state_dict(torch.load(path, map_location=self.device))
+        try:
+            path = os.path.join(self.training_history, "weights", "best_weights", "vae_best_weight.pth")
+            model.load_state_dict(torch.load(path, map_location=self.device))
+        except:
+            raise Exception("VAE weights not found. Please re-run the training scripts (VAE -> CLS).")
         model.eval()
         return model
 
     def _load_classifier(self):
         model = ClassifierHead(input_dim=133).to(self.device)
-        path = os.path.join(self.training_history, "weights", "best_weights", "cls_best_weight.pth")
-        model.load_state_dict(torch.load(path, map_location=self.device))
+        try:
+            path = os.path.join(self.training_history, "weights", "best_weights", "cls_best_weight.pth")
+            model.load_state_dict(torch.load(path, map_location=self.device))
+        except:
+            raise Exception("Classifier weights not found. Please re-run the training scripts (VAE -> CLS).")
         model.eval()
         return model
     

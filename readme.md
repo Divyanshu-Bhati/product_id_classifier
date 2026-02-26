@@ -25,7 +25,9 @@ Download and store them in the following directories respectively:
 * `training_history/weights/best_weights/vae_weights.pt`
 * `training_history/weights/best_weights/cls_weights.pt`
 
-*Note: Re-training the model will rewrite all above mentioned files, please create backups if needed.*
+*Note 1: Re-training the model will rewrite all above mentioned files, please create backups if needed.*
+
+*Note 2: If you do not download these files, pelase run the training scripts first. `inference.py` requires weights.*
 
 Then, run the following commands:
 #### For Linux-based systems (WSL2, Ubuntu, etc.):
