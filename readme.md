@@ -48,7 +48,7 @@ python train_cls.py # then train the classifier
 git clone https://github.com/Divyanshu-Bhati/product_id_classifier.git
 cd product_id_classifier
 chmod +x setup_mac.sh
-./setup_mac.sh
+source setup_mac.sh
 python3 inference.py # only for testing (on test csv) using saved weights 
 python3 train_vae.py # train the vae first
 python3 train_cls.py # then train the classifier
