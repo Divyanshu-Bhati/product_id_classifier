@@ -2,17 +2,19 @@
 
 Click the icon to Quick Start (in Google Colab): [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Divyanshu-Bhati/product_id_classifier/blob/main/notebooks/colab_run.ipynb)
 
+WandB project repo: [W&B repo](https://wandb.ai/profile/divyanshubhati/projects)
+
 ## 1. Problem Statement & Business Use Case
 
 In large-scale e-commerce and logistics datasets, "Product IDs" often follow strict but undocumented structural rules. Traditional regex-based validation is brittle and fails to catch entries that "look" like IDs but violate latent structural patterns. This becomes especially problematic when factoring in unstructured or semi-structured data from the web, product documents, and spreadsheets across multiple organizations.
 
-Drawing inspiration from VAE applications in fraud detection algorithms, I designed a classifier that uses the VAE to learn latent representations of "valid" IDs, and anything outside of that latent space is considered "invalid". This decision boundary is created by a simple MLP classifier that takes inputs from the VAE reconstruction. This approach addresses the extreme class imbalance in the industry: "valid" product IDs are clearly labeled and readily available, while "invalid" ones are highly varied and difficult to comprehensively define. This project, then, treats ID validation as a signal reconstruction task.
+Drawing inspiration from VAE applications in fraud detection algorithms, I designed a classifier that uses the VAE to learn latent representations of "valid" IDs, which doubles-up as a feature extractor for a downstream MLP classifier that takes the inputs from the VAE and creates a decision boundary. The idea behind using a VAE comes from the fact that product IDs do not have in and of itself any 'features'. This approach addresses the extreme class imbalance in the industry: "valid" product IDs are clearly labeled and readily available, while "invalid" ones are highly varied and difficult to comprehensively define. This project, then, treats ID validation as a signal reconstruction task.
 
-*Note: This repository contains a complete implementation of a VAE-Classifier originally trained on proprietary data, outputs of which were used to extract millions of products from unstructured PDFs. For this open-source version, I used a public Kaggle dataset. No proprietary data or weights are, or will be, shared.*
+*Note: This repository contains a complete implementation of a VAE-Classifier originally trained on proprietary data (30-40M records), outputs of which were used to extract millions of products from unstructured PDFs, this increased the organizations catalog and thus, revenue. For this open-source version, I used a public Kaggle dataset. No proprietary data or weights are, or will be, shared.*
 
 ## 2. Getting Started
-### Installation requirements: 
-Python version 3.10, and CUDA version 12.6 setup is required (for GPU). GPU with at least 4GB of VRAM is recommended for full training.
+### Installation requirements:
+Python version 3.10, and CUDA version 12.6 setup is required (for Windows/Linux GPU) or a compatible MPS chip (on MacOS). GPU with at least 4GB of VRAM or 16GB of Unified Memory is recommended for full training.
 
 ### Quick Start:
 The easiest way to set up and run the code is via the provided Google Colab link at the top of this document and simply run each cell.
@@ -20,10 +22,11 @@ The easiest way to set up and run the code is via the provided Google Colab link
 ### Local Setup:
 You can find my best weights (trained on the Kaggle dataset), classifier scaler parameters, and training vocabulary in the [v1.0.0 Release](https://github.com/Divyanshu-Bhati/product_id_classifier/releases/tag/v1.0).
 Download and store them in the following directories respectively:
+(AFTER cloning the repo from the below step, the training folder must be created in the base project path)
 * `training_history/vocab.json`
 * `training_history/cls_scaler_params.pth`
-* `training_history/weights/best_weights/vae_weights.pt`
-* `training_history/weights/best_weights/cls_weights.pt`
+* `training_history/weights/best_weights/vae_best_weight.pth`
+* `training_history/weights/best_weights/cls_best_weight.pth`
 
 *Note 1: Re-training the model will rewrite all above mentioned files, please create backups if needed.*
 
@@ -124,6 +127,7 @@ $$\mathcal{L} = -\frac{1}{N} \sum_{i=1}^{N} \left[ y_i \log(\sigma(\hat{y}_i)) +
 
 ## 5. Data Preparation
 * From the amazon reviews dataset (see section 8), I select the ProductID and UserID columns to be my valid IDs, and I create invalid IDs using the Time and Summary columns, and augment those randomly with character perturbations to act as real world noise.
+* For noisy data strings, I decided not to normalize or stem the inputs (during training or inference) to allow the model to learn more robust representations.
 * To mimic the problem of data imbalance, I use a majority of the data to train the VAE, and a smaller subset to train the classifier. The VAE (as mentioned above) was exclusively trained on valid IDs, and the negative samples (invalid IDs) were used only for evaluation. The classifier was trained on both valid and invalid IDs, and the VAE features were frozen during training.
 * Detailed thought process, EDA, and the preprocessing pipeline can be found in `notebooks/prepare_dataset.ipynb`.
 
@@ -133,17 +137,27 @@ $$\mathcal{L} = -\frac{1}{N} \sum_{i=1}^{N} \left[ y_i \log(\sigma(\hat{y}_i)) +
 * Classifier Phase: The MLP head was trained on the frozen VAE features (Latent Mean, Variance, Reconstruction Loss and KL divergence) alongside heuristic string features.
 
 ### Evaluation Metrics:
-* Given the extreme class imbalance (valid IDs heavily outnumbering invalid ones), standard accuracy is a flawed metric. The model was evaluated primarily on Precision, Recall, F1-Score, and ROC-AUC.
+* For the VAE, the model was evaluated using the reconstruction error of the eval set, which contained synthetic invalid IDs (best case scenario is lower reconstruction error for valid IDs and higher for invalid IDs).
+* For the classifier, given the extreme class imbalance (valid IDs known, and heavily outnumbering invalid ones), standard accuracy is a flawed metric. The model was evaluated primarily on Precision, Recall, F1-Score, and ROC-AUC (depending upon the subjective use case, it may be beneficial to have higher recall or precision but use F1 or ROC-AUC curve as a better evaluation for the model itself).
 
 ### Results:
 * For the VAE: The best `Training Loss: 2.7671`, & `Val Loss: 27.6103`. The `Mean Reconstruction Error for Valid IDs was 0.0433`, and the `Mean Reconstruction Error for Invalid IDs was 52.5953`. The large gap between the reconstruction of Valid and Invalid IDs, along with the increase in Val Loss as the Training Loss dropped, indicated the model's ability to learn to reconstruct valid IDs effectively, while failing to reconstruct invalid ones. Only the validation set had negative IDs at all, so this is expected.
 * For the Classifier: The best `ROC-AUC Score was 0.8365`. Looking at `Precision: 0.7532` and `Recall: 0.8389`, clearly the model is better at saying Valid to most IDs, sacrificing a little on correct answers. The model achieved an overall `accuracy of 82.84%`. The current results are a limitation of the current approach, and could present opportunities for future work (see section 7).
 * Reconstruction Error & Latent space vector as a Signal: The VAE's reconstruction cross-entropy proved to be the highest-importance feature for the downstream MLP, effectively acting as an anomaly score, signalled by the KL divergence.
 
-## 7. Future Work & Limitations
-* Currently, the model operates on a "closed-world" assumption where the input is a pre-extracted ID string. In production environments (e.g., OCR from shipping labels, or unstructured PDF documents), IDs are often embedded within noisy text. Implementing a Sliding Window or Token Segmentation approach may allow the model to extract and validate IDs from unstructured data streams.
+<p align="center">
+  <img src="assets/cls_training_wandb_log_ancient-wind-34.png" />
+</p>
+Description: Classifier training progress demonstrating training loss, validation loss and validation accuracy. (The same can be found in WandB project repo.)
 
-* The current VAE architecture utilizes a flattened embedding layer: `x_flat = x_emb.view(batch, -1)`. While computationally efficient, this treats the sequence as a high-dimensional vector and may overlook long-range spatial dependencies between specific character positions (e.g., character at position 2 may relate to character at, say, position 4). Integrating Positional Encodings or transitioning to a Recurrent (LSTM) or Attention-based (Transformer) encoder may help.
+## 7. Future Work & Limitations
+* Currently, the system operates on a "closed-world" assumption where the input is a pre-extracted ID string. In production environments (e.g., OCR from shipping labels, or unstructured PDF documents), IDs are often embedded within noisy text. Implementing a Sliding Window or Token Segmentation approach may allow the model to extract and validate IDs from unstructured data streams.
+
+* The current VAE architecture utilizes a flattened embedding layer: `x_flat = x_emb.view(batch, -1)`. While computationally efficient, this treats the sequence as a high-dimensional vector and may overlook long-range spatial dependencies between specific character positions (e.g., character at position 2 may relate to character at, say, position 4). Integrating Positional Encodings may help capture these long-range patterns.
+
+* The current approach trains and evaluates both the VAE and MLP independently. It was based on the idea that isolating the VAE would ensure the latent space only learns patterns, and not introduce bias based on inputs from the classification task. It can be explored if connecting and then training the VAE and the classifier together would improve the performance of the system.
+
+* For both the tasks of feature extraction and classification, an ensemble of models approach can be considered. For example, if labelled data could be generated then an attention based model could be pre-trained as well (Transformer/Small LLMs). As described earlier, however, we did not have access to labelled data and decided not to use it for this project. This opens up room for future work.
 
 ## 8. References & Acknowledgments
 * Kaggle Dataset: Amazon Product Reviews ([Kaggle/arhamrumi/amazon-product-reviews](https://www.kaggle.com/datasets/arhamrumi/amazon-product-reviews/data))
