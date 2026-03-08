@@ -16,7 +16,7 @@ fi
 source $VENV_NAME/bin/activate
 
 # Installing Dependencies
-echo "Upgrading pip and installing requrements (CUDA support)..."
+echo "Upgrading pip and installing requirements (CUDA support)..."
 pip install --upgrade pip==26.0.1
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
 if [ -f "requirements_linux.txt" ]; then
