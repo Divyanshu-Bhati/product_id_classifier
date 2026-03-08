@@ -322,7 +322,7 @@ class TrainCLS:
                 for x_val, y_val in eval_dataloader:
                     probs = classifier_model(x_val).squeeze()
                     all_probs.extend(probs.cpu().numpy())
-                    all_preds.extend((probs > 0.9).float().cpu().numpy())
+                    all_preds.extend((probs > 0.5).float().cpu().numpy())
                     all_labels_list.extend(y_val.cpu().numpy())
 
             precision, recall, f1, _ = precision_recall_fscore_support(all_labels_list, all_preds, average='binary')
