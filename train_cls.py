@@ -320,7 +320,8 @@ class TrainCLS:
             all_probs, all_preds, all_labels_list = [], [], []
             with torch.no_grad():
                 for x_val, y_val in eval_dataloader:
-                    probs = classifier_model(x_val).squeeze()
+                    logits = classifier_model(x_val).squeeze()
+                    probs = torch.sigmoid(logits)
                     all_probs.extend(probs.cpu().numpy())
                     all_preds.extend((probs > 0.5).float().cpu().numpy())
                     all_labels_list.extend(y_val.cpu().numpy())
